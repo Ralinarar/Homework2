@@ -1,0 +1,57 @@
+#!/bin/sh
+
+dir=''
+name=''
+
+print_usage() {
+  printf "Usage: -d directory to archive, -n script file name"
+}
+
+while getopts 'd:n:' flag; do
+  case "${flag}" in
+    d) dir="${OPTARG}" ;;
+    n) name="${OPTARG}" ;;
+    *) print_usage
+       exit 1 ;;
+  esac
+done
+
+[ ! -d "${dir}" ] && echo "Directory ${dir} does not exists." && exit
+
+# now make a temp file
+TMP_FILE=$(mktemp -q /tmp/archive.XXXXXX || exit 1)
+# Set trap to clean up file
+trap 'rm -f -- "$TMP_FILE"' EXIT
+
+# continue with script
+tar -zcf $TMP_FILE $dir
+
+encoded_archive=$(base64 -i $TMP_FILE)
+read_label='${OPTARG}'
+out_label='$output'
+flag_label='$flag'
+pwd_label='$PWD'
+
+rm -f -- "$name"
+cat >> $name <<EOF
+
+output=${pwd_label}
+
+while getopts 'o:' flag; do
+  case "${flag_label}" in
+    o) output="${read_label}" ;;
+    *) printf "Usage: -o (optional) output directory"
+    exit 1 ;;
+  esac
+done
+
+echo ${encoded_archive} | base64 -d | tar -xz -C ${out_label}
+
+EOF
+
+chmod +x $name
+
+# clean up logic
+rm -f -- "$TMP_FILE"
+trap - EXIT
+exit
